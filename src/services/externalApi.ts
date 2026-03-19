@@ -75,6 +75,46 @@ export interface CompareCropsResponse {
   recommendation: string;
 }
 
+export interface WeatherResponse {
+  location: string;
+  temperature: number;
+  rainfall: number;
+  humidity: number;
+  condition: string;
+  forecast?: string;
+}
+
+export interface SoilResponse {
+  location: string;
+  soil_type: string;
+  ph_level: number;
+  nutrients: {
+    nitrogen: string;
+    phosphorus: string;
+    potassium: string;
+  };
+  recommendations: string[];
+}
+
+export interface PriceResponse {
+  crop: string;
+  current_price: number;
+  min_price: number;
+  max_price: number;
+  trend: string;
+  market: string;
+  last_updated: string;
+}
+
+export interface CropsListResponse {
+  crops: Array<{
+    name: string;
+    category: string;
+    season: string;
+    duration: string;
+  }>;
+}
+
 // ============================================================================
 // FORMATTED TYPES (UI-Friendly)
 // ============================================================================
@@ -121,6 +161,46 @@ export interface FormattedComparison {
   }>;
   winner: string;
   recommendation: string;
+}
+
+export interface FormattedWeather {
+  location: string;
+  temperature: number;
+  rainfall: number;
+  humidity: number;
+  condition: string;
+  forecast?: string;
+}
+
+export interface FormattedSoil {
+  location: string;
+  soilType: string;
+  phLevel: number;
+  nutrients: {
+    nitrogen: string;
+    phosphorus: string;
+    potassium: string;
+  };
+  recommendations: string[];
+}
+
+export interface FormattedPrice {
+  crop: string;
+  currentPrice: number;
+  minPrice: number;
+  maxPrice: number;
+  trend: string;
+  market: string;
+  lastUpdated: string;
+}
+
+export interface FormattedCropsList {
+  crops: Array<{
+    name: string;
+    category: string;
+    season: string;
+    duration: string;
+  }>;
 }
 
 // ============================================================================
@@ -253,6 +333,66 @@ export function formatComparison(
   };
 }
 
+/**
+ * Format weather response for UI
+ */
+export function formatWeather(data: WeatherResponse): FormattedWeather {
+  return {
+    location: data.location,
+    temperature: data.temperature,
+    rainfall: data.rainfall,
+    humidity: data.humidity,
+    condition: data.condition,
+    forecast: data.forecast,
+  };
+}
+
+/**
+ * Format soil response for UI
+ */
+export function formatSoil(data: SoilResponse): FormattedSoil {
+  return {
+    location: data.location,
+    soilType: data.soil_type,
+    phLevel: data.ph_level,
+    nutrients: {
+      nitrogen: data.nutrients.nitrogen,
+      phosphorus: data.nutrients.phosphorus,
+      potassium: data.nutrients.potassium,
+    },
+    recommendations: data.recommendations || [],
+  };
+}
+
+/**
+ * Format price response for UI
+ */
+export function formatPrice(data: PriceResponse): FormattedPrice {
+  return {
+    crop: data.crop,
+    currentPrice: data.current_price,
+    minPrice: data.min_price,
+    maxPrice: data.max_price,
+    trend: data.trend,
+    market: data.market,
+    lastUpdated: data.last_updated,
+  };
+}
+
+/**
+ * Format crops list response for UI
+ */
+export function formatCropsList(data: CropsListResponse): FormattedCropsList {
+  return {
+    crops: data.crops.map((crop) => ({
+      name: crop.name,
+      category: crop.category,
+      season: crop.season,
+      duration: crop.duration,
+    })),
+  };
+}
+
 // ============================================================================
 // EXTERNAL API SERVICE
 // ============================================================================
@@ -377,6 +517,124 @@ export const externalApiService = {
     );
 
     return formatComparison(response);
+  },
+
+  /**
+   * Get weather data for a location
+   * 
+   * @param location - District or location name
+   * @returns Weather data including temperature, rainfall, humidity
+   * 
+   * @example
+   * const weather = await externalApiService.getWeather('Pune');
+   * console.log(weather.temperature, weather.rainfall);
+   */
+  async getWeather(location: string): Promise<FormattedWeather | null> {
+    const fallback: WeatherResponse = {
+      location,
+      temperature: 28,
+      rainfall: 0,
+      humidity: 65,
+      condition: 'Clear',
+      forecast: 'External API unavailable',
+    };
+
+    const response = await externalApiCall<WeatherResponse>(
+      `/weather/${encodeURIComponent(location)}`,
+      { method: 'GET' },
+      fallback
+    );
+
+    return formatWeather(response);
+  },
+
+  /**
+   * Get soil data for a location
+   * 
+   * @param location - District or location name
+   * @returns Soil type, pH level, nutrients, and recommendations
+   * 
+   * @example
+   * const soil = await externalApiService.getSoil('Pune');
+   * console.log(soil.soilType, soil.phLevel);
+   */
+  async getSoil(location: string): Promise<FormattedSoil | null> {
+    const fallback: SoilResponse = {
+      location,
+      soil_type: 'Loamy',
+      ph_level: 6.5,
+      nutrients: {
+        nitrogen: 'Medium',
+        phosphorus: 'Medium',
+        potassium: 'Medium',
+      },
+      recommendations: ['External API unavailable'],
+    };
+
+    const response = await externalApiCall<SoilResponse>(
+      `/soil/${encodeURIComponent(location)}`,
+      { method: 'GET' },
+      fallback
+    );
+
+    return formatSoil(response);
+  },
+
+  /**
+   * Get market price for a crop
+   * 
+   * @param crop - Crop name
+   * @returns Current price, min/max prices, trend, and market info
+   * 
+   * @example
+   * const price = await externalApiService.getPrice('Bajra');
+   * console.log(price.currentPrice, price.trend);
+   */
+  async getPrice(crop: string): Promise<FormattedPrice | null> {
+    const fallback: PriceResponse = {
+      crop,
+      current_price: 2500,
+      min_price: 2000,
+      max_price: 3000,
+      trend: 'stable',
+      market: 'Local Mandi',
+      last_updated: new Date().toISOString(),
+    };
+
+    const response = await externalApiCall<PriceResponse>(
+      `/price/${encodeURIComponent(crop)}`,
+      { method: 'GET' },
+      fallback
+    );
+
+    return formatPrice(response);
+  },
+
+  /**
+   * Get list of all available crops
+   * 
+   * @returns List of crops with category, season, and duration
+   * 
+   * @example
+   * const cropsList = await externalApiService.getCrops();
+   * console.log(cropsList.crops);
+   */
+  async getCrops(): Promise<FormattedCropsList | null> {
+    const fallback: CropsListResponse = {
+      crops: [
+        { name: 'Bajra', category: 'Cereal', season: 'Kharif', duration: '70-90 days' },
+        { name: 'Wheat', category: 'Cereal', season: 'Rabi', duration: '120-150 days' },
+        { name: 'Rice', category: 'Cereal', season: 'Kharif', duration: '120-150 days' },
+      ],
+    };
+
+    const response = await externalApiCall<CropsListResponse>(
+      '/crops',
+      { method: 'GET' },
+      fallback
+    );
+
+    return formatCropsList(response);
   },
 
   /**
