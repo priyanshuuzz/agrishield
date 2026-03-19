@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { t } from '../translations';
 import { CROPS } from '../constants';
 import { useVoiceRecognition } from '../hooks/useVoiceRecognition';
+import { externalApiService, districtIdToLocation } from '../services/externalApi';
 
 interface Message {
   id: string;
@@ -77,7 +78,57 @@ export const AIAssistant = () => {
     }
   }, [messages, isTyping]);
 
-  const generateResponse = (userInput: string) => {
+  // Extract location from user input or use current district
+  const extractLocation = (userInput: string): string => {
+    const input = userInput.toLowerCase();
+    
+    // Check for common location keywords
+    const locations = ['pune', 'nashik', 'aurangabad', 'solapur', 'ahmednagar', 'satara', 'sangli', 'mumbai', 'delhi'];
+    for (const loc of locations) {
+      if (input.includes(loc)) {
+        return loc.charAt(0).toUpperCase() + loc.slice(1);
+      }
+    }
+    
+    // Use current district as fallback
+    return districtIdToLocation(state.districtId);
+  };
+
+  // Format API response into readable message
+  const formatApiResponse = (advice: any): string => {
+    if (!advice) return t('response_default', language);
+    
+    let response = `🌾 **Recommended Crop:** ${advice.crop}\n\n`;
+    response += `📊 **Why this crop?**\n${advice.reason}\n\n`;
+    
+    if (advice.profit) {
+      response += `💰 **Profit Insight:**\n${advice.profit}\n\n`;
+    }
+    
+    if (advice.risk) {
+      response += `⚠️ **Risk Level:** ${advice.risk}\n\n`;
+    }
+    
+    if (advice.steps && advice.steps.length > 0) {
+      response += `✅ **What you should do:**\n`;
+      advice.steps.forEach((step: string, i: number) => {
+        response += `${i + 1}. ${step}\n`;
+      });
+      response += '\n';
+    }
+    
+    if (advice.warnings && advice.warnings.length > 0) {
+      response += `🚨 **Warnings:**\n`;
+      advice.warnings.forEach((warning: string) => {
+        response += `• ${warning}\n`;
+      });
+    }
+    
+    return response.trim();
+  };
+
+  // Fallback response generator (original template-based logic)
+  const generateFallbackResponse = (userInput: string) => {
     const input = userInput.toLowerCase();
     const topRanking = result.cropRankings[0];
     const topCrop = CROPS.find(c => c.id === topRanking.cropId);
@@ -124,6 +175,33 @@ export const AIAssistant = () => {
     return t('response_default', language);
   };
 
+  // Main response generator with ML backend integration
+  const generateResponse = async (userInput: string): Promise<string> => {
+    try {
+      // Extract location from user input
+      const location = extractLocation(userInput);
+      
+      console.log(`[AI Assistant] Calling ML API for location: ${location}`);
+      
+      // Call external ML backend API
+      const advice = await externalApiService.getQuickAdvice(location);
+      
+      if (advice) {
+        console.log('[AI Assistant] ML API response received:', advice);
+        return formatApiResponse(advice);
+      }
+      
+      // If API returns null, use fallback
+      console.log('[AI Assistant] ML API returned null, using fallback');
+      return generateFallbackResponse(userInput);
+      
+    } catch (error) {
+      console.error('[AI Assistant] ML API error:', error);
+      // On error, use fallback response
+      return generateFallbackResponse(userInput);
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
 
@@ -134,21 +212,38 @@ export const AIAssistant = () => {
       timestamp: new Date()
     };
 
+    const userInputCopy = input; // Save input before clearing
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsTyping(true);
 
-    // Simulate AI thinking
-    setTimeout(() => {
+    try {
+      // Call ML backend API
+      const responseContent = await generateResponse(userInputCopy);
+      
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: generateResponse(input),
+        content: responseContent,
         timestamp: new Date()
       };
+      
       setMessages(prev => [...prev, aiResponse]);
+    } catch (error) {
+      console.error('[AI Assistant] Error generating response:', error);
+      
+      // Show error message to user
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: '⚠️ Unable to fetch advice. Please try again.',
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, errorResponse]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   return (
