@@ -106,7 +106,10 @@ export const LandingPage = () => {
                   >
                     {t('start_analysis', language)} <ArrowRight size={22} className="group-hover:translate-x-1 transition-transform" />
                   </button>
-                  <button className="group bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-10 py-5 rounded-2xl font-black text-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-3 shadow-sm hover:shadow-md">
+                  <button 
+                    onClick={() => window.open("https://youtu.be/bdZbvmZrcvo", "_blank")}
+                    className="group bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-10 py-5 rounded-2xl font-black text-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-3 shadow-sm hover:shadow-md"
+                  >
                     <div className="w-8 h-8 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center group-hover:bg-primary/10 transition-colors">
                       <Play size={16} className="text-slate-600 dark:text-slate-300 group-hover:text-primary fill-current" />
                     </div>
