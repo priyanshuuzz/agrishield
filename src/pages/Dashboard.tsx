@@ -123,7 +123,8 @@ export const Dashboard = () => {
         const data = await getWeather(query);
         setWeather(data);
       } catch (err) {
-        setError("Unable to fetch real-time data");
+        console.error("Weather fetch error:", err);
+        setError("⚠️ Live weather unavailable");
       } finally {
         setLoading(false);
       }
