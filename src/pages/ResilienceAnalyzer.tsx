@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../store';
 import { Sidebar, Header, cn } from '../components/Common';
 import { CROPS } from '../constants';
 import { t } from '../translations';
-import { ShieldAlert, Info, Thermometer, Droplets, History, Play, TrendingUp, TrendingDown, Sprout, ShieldCheck, ChevronRight, Sparkles, ArrowRight, Target, Zap } from 'lucide-react';
+import { ShieldAlert, Info, Thermometer, Droplets, History, Play, TrendingUp, TrendingDown, Sprout, ShieldCheck, ChevronRight, Sparkles, ArrowRight, Target, Zap, BarChart3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const containerVariants = {
@@ -26,9 +26,73 @@ const itemVariants = {
 };
 
 export const ResilienceAnalyzer = () => {
-  const { language } = useApp();
+  const { state, language } = useApp();
   const [selectedCropId, setSelectedCropId] = useState(CROPS[0].id);
+  const [showComparison, setShowComparison] = useState(false);
   const crop = CROPS.find(c => c.id === selectedCropId)!;
+
+  // Dynamic resilience calculation based on current conditions
+  const calculateResilience = (cropData: typeof crop) => {
+    const baseScore = {
+      rice: 70,
+      wheat: 65,
+      bajra: 80,
+      soybean: 75,
+      arhar: 78,
+      cotton: 72,
+      maize: 68,
+      sugarcane: 60
+    };
+
+    const soilImpact = state.soilType.toLowerCase() === "loamy" ? 10 : 
+                       state.soilType.toLowerCase() === "clayey" ? 5 : -5;
+    
+    const weatherImpact = (state.avgTemp > 35 ? -10 : 5) + 
+                          (state.forecastRain < 500 ? -8 : 6);
+    
+    const cropSpecificBonus = (cropData.droughtResilience + cropData.rainResilience + cropData.tempResilience) / 30;
+
+    return Math.min(100, Math.max(0, (baseScore[cropData.id as keyof typeof baseScore] || 70) + soilImpact + weatherImpact + cropSpecificBonus));
+  };
+
+  const resilienceScore = useMemo(() => calculateResilience(crop), [crop, state.soilType, state.avgTemp, state.forecastRain]);
+
+  // Generate dynamic AI insight
+  const generateInsight = (score: number) => {
+    if (score > 80)
+      return `Highly resilient crop under current climate conditions. ${crop.name} shows excellent adaptability to ${state.soilType} soil with ${state.avgTemp}°C temperature.`;
+    if (score > 60)
+      return `Moderately stable performance expected. Consider hybrid varieties of ${crop.name} to improve resilience in ${state.soilType} soil conditions.`;
+    return `High climate risk detected for ${crop.name}. Current conditions (${state.avgTemp}°C, ${state.forecastRain}mm rainfall) may stress this crop. Consider switching to drought-resistant alternatives.`;
+  };
+
+  // Dynamic recommendation based on conditions
+  const generateRecommendation = () => {
+    if (resilienceScore < 60) {
+      if (state.forecastRain < 500)
+        return "Switch to drought-resistant crops like Bajra or Arhar for better yield security.";
+      if (state.avgTemp > 35)
+        return "Consider early sowing or heat-tolerant varieties to mitigate temperature stress.";
+      return "Current conditions are challenging. Explore alternative crops with higher resilience scores.";
+    }
+    if (state.forecastRain < 500)
+      return "Implement drip irrigation to maximize water efficiency for this crop.";
+    if (state.avgTemp > 32)
+      return "Monitor for heat stress. Consider shade nets or mulching techniques.";
+    return "Conditions are favorable. Focus on optimizing nutrient management for maximum yield.";
+  };
+
+  const aiInsight = useMemo(() => generateInsight(resilienceScore), [resilienceScore, crop, state]);
+  const recommendation = useMemo(() => generateRecommendation(), [resilienceScore, state]);
+
+  // Comparative analysis for all crops
+  const comparativeAnalysis = useMemo(() => {
+    return CROPS.map(c => ({
+      crop: c,
+      score: calculateResilience(c),
+      recommendation: calculateResilience(c) > 75 ? "Recommended" : calculateResilience(c) > 60 ? "Viable" : "High Risk"
+    })).sort((a, b) => b.score - a.score);
+  }, [state.soilType, state.avgTemp, state.forecastRain]);
 
   const resilienceMetrics = [
     { label: 'Rainfall Resilience', value: crop.rainResilience, icon: Droplets, color: 'from-blue-500 to-cyan-400', shadow: 'shadow-blue-500/30' },
@@ -139,9 +203,17 @@ export const ResilienceAnalyzer = () => {
                   <div className="flex flex-col items-end">
                     <div className="flex flex-col items-center gap-1 bg-slate-50 dark:bg-slate-800 px-8 py-4 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('resilience_index_label', language)}</span>
-                      <span className="text-4xl font-black text-primary">
-                        {Math.round((crop.rainResilience + crop.tempResilience + crop.droughtResilience) / 3)}
-                      </span>
+                      <motion.span 
+                        key={resilienceScore}
+                        initial={{ scale: 1.5, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className={cn("text-4xl font-black", 
+                          resilienceScore > 80 ? "text-emerald-500" : 
+                          resilienceScore > 60 ? "text-primary" : "text-red-500"
+                        )}
+                      >
+                        {Math.round(resilienceScore)}
+                      </motion.span>
                     </div>
                   </div>
                 </div>
@@ -253,28 +325,111 @@ export const ResilienceAnalyzer = () => {
               </div>
               <div className="absolute left-0 bottom-0 w-full h-1 bg-gradient-to-r from-primary via-emerald-500 to-primary" />
               
-              <div className="relative z-10 max-w-xl">
+              <div className="relative z-10">
                 <div className="flex items-center gap-3 mb-8">
                   <div className="p-2.5 bg-primary/20 rounded-2xl backdrop-blur-md border border-white/10">
                     <Zap className="text-primary" size={24} />
                   </div>
                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{t('ai_resilience_insights', language)}</span>
                 </div>
-                <h3 className="text-4xl font-black mb-6 leading-tight">{t('predictive_optimization', language)}</h3>
-                <p className="text-slate-400 font-bold text-xl leading-relaxed mb-12">
-                  {t('predictive_optimization_desc', language).replace('{crop}', t(crop.id as any, language))}
+                <h3 className="text-4xl font-black mb-6 leading-tight">{t('ai_climate_resilience', language)}</h3>
+                <p className="text-slate-400 font-bold text-xl leading-relaxed mb-8">
+                  {aiInsight}
                 </p>
+                <div className="p-6 bg-white/5 rounded-2xl border border-white/10 mb-8">
+                  <h4 className="text-sm font-black text-primary mb-3 uppercase tracking-widest">{t('recommendation', language)}</h4>
+                  <p className="text-slate-300 font-medium leading-relaxed">
+                    {recommendation}
+                  </p>
+                </div>
                 <motion.button 
                   whileHover={{ x: 10 }}
+                  onClick={() => setShowComparison(!showComparison)}
                   className="flex items-center gap-4 text-primary font-black text-xl group transition-all"
                 >
-                  {t('run_comparative_analysis', language)} 
+                  {showComparison ? t('hide_comparison', language) : t('run_comparative_analysis', language)} 
                   <div className="w-12 h-12 rounded-full border border-primary/30 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all">
-                    <ArrowRight size={24} />
+                    {showComparison ? <ChevronRight size={24} className="rotate-90" /> : <ArrowRight size={24} />}
                   </div>
                 </motion.button>
               </div>
             </motion.div>
+
+            {/* Comparative Analysis Table */}
+            <AnimatePresence>
+              {showComparison && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-200 dark:border-slate-800 overflow-hidden"
+                >
+                  <div className="p-10">
+                    <div className="flex items-center gap-3 mb-8">
+                      <div className="p-2.5 bg-primary/10 rounded-xl">
+                        <BarChart3 className="text-primary" size={24} />
+                      </div>
+                      <h3 className="text-2xl font-black">{t('comparative_analysis', language)}</h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-slate-200 dark:border-slate-800">
+                            <th className="text-left py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest">{t('crop', language)}</th>
+                            <th className="text-center py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest">{t('resilience_score', language)}</th>
+                            <th className="text-center py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest">{t('status', language)}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {comparativeAnalysis.map((item, idx) => (
+                            <motion.tr
+                              key={item.crop.id}
+                              initial={{ opacity: 0, x: -20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: idx * 0.05 }}
+                              className={cn(
+                                "border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all cursor-pointer",
+                                item.crop.id === selectedCropId && "bg-primary/5"
+                              )}
+                              onClick={() => setSelectedCropId(item.crop.id)}
+                            >
+                              <td className="py-5 px-6">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center">
+                                    <Sprout size={20} className="text-primary" />
+                                  </div>
+                                  <div>
+                                    <p className="font-black text-slate-900 dark:text-white">{t(item.crop.id as any, language)}</p>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase">{t(item.crop.type.toLowerCase() as any, language)}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-5 px-6 text-center">
+                                <span className={cn("text-2xl font-black",
+                                  item.score > 80 ? "text-emerald-500" :
+                                  item.score > 60 ? "text-primary" : "text-red-500"
+                                )}>
+                                  {Math.round(item.score)}
+                                </span>
+                              </td>
+                              <td className="py-5 px-6 text-center">
+                                <span className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest",
+                                  item.recommendation === "Recommended" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" :
+                                  item.recommendation === "Viable" ? "bg-primary/10 text-primary" :
+                                  "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
+                                )}>
+                                  {item.recommendation}
+                                </span>
+                              </td>
+                            </motion.tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </motion.div>
       </main>

@@ -682,22 +682,105 @@ export const LandingPage = () => {
         </section>
       </main>
 
-      <footer className="bg-background-light dark:bg-background-dark border-t border-primary/10 py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-12">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Brain className="text-primary" size={24} />
+      {/* Newsletter Section */}
+      <section className="py-20 bg-gradient-to-br from-primary/5 to-emerald-500/5 border-y border-primary/10">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <h3 className="text-3xl font-black mb-4 text-slate-900 dark:text-slate-100">{t('stay_updated', language)}</h3>
+            <p className="text-lg text-slate-500 dark:text-slate-400 mb-8 font-medium">
+              {t('newsletter_desc', language)}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto">
+              <input
+                type="email"
+                placeholder={t('enter_email', language)}
+                className="flex-1 px-6 py-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <button className="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-xl font-black transition-all shadow-lg shadow-primary/20 hover:scale-105 active:scale-95">
+                {t('subscribe', language)}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-slate-900 dark:bg-slate-950 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
+            {/* Brand Section */}
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/20 rounded-xl">
+                  <Brain className="text-primary" size={28} />
+                </div>
+                <span className="text-2xl font-black tracking-tight">AgriShield AI</span>
               </div>
-              <span className="text-xl font-black tracking-tight text-slate-900 dark:text-slate-100">AgriShield AI</span>
+              <p className="text-slate-400 font-medium leading-relaxed">
+                AI-powered climate intelligence for smarter farming decisions.
+              </p>
+              <div className="flex gap-4">
+                <a href="#" className="w-10 h-10 bg-slate-800 hover:bg-primary/20 rounded-lg flex items-center justify-center transition-all hover:scale-110">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z"></path></svg>
+                </a>
+                <a href="#" className="w-10 h-10 bg-slate-800 hover:bg-primary/20 rounded-lg flex items-center justify-center transition-all hover:scale-110">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z"></path><circle cx="4" cy="4" r="2"></circle></svg>
+                </a>
+              </div>
             </div>
-            <div className="flex flex-wrap justify-center gap-10 text-sm font-bold text-slate-500 dark:text-slate-400">
-              <a className="hover:text-primary transition-colors" href="#">{t('privacy_policy', language)}</a>
-              <a className="hover:text-primary transition-colors" href="#">{t('terms_of_service', language)}</a>
-              <a className="hover:text-primary transition-colors" href="#">{t('documentation', language)}</a>
-              <a className="hover:text-primary transition-colors" href="#">{t('api_reference', language)}</a>
+
+            {/* Product */}
+            <div>
+              <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6">{t('product', language)}</h4>
+              <ul className="space-y-4">
+                {[
+                  { label: t('dashboard', language), page: 'dashboard' },
+                  { label: t('what_if', language), page: 'what-if' },
+                  { label: t('assistant', language), page: 'assistant' },
+                  { label: t('resilience', language), page: 'resilience' }
+                ].map((item) => (
+                  <li key={item.page}>
+                    <button
+                      onClick={() => setCurrentPage(item.page as any)}
+                      className="text-slate-400 hover:text-primary transition-colors font-medium"
+                    >
+                      {item.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <p className="text-sm font-bold text-slate-400">{t('all_rights_reserved', language)}</p>
+
+            {/* Resources */}
+            <div>
+              <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6">{t('resources', language)}</h4>
+              <ul className="space-y-4">
+                <li><a href="#" className="text-slate-400 hover:text-primary transition-colors font-medium">{t('documentation', language)}</a></li>
+                <li><a href="#" className="text-slate-400 hover:text-primary transition-colors font-medium">{t('api_reference', language)}</a></li>
+                <li><a href="#" className="text-slate-400 hover:text-primary transition-colors font-medium">{t('blog', language)}</a></li>
+                <li><a href="#" className="text-slate-400 hover:text-primary transition-colors font-medium">{t('help_center', language)}</a></li>
+              </ul>
+            </div>
+
+            {/* Legal */}
+            <div>
+              <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6">{t('legal', language)}</h4>
+              <ul className="space-y-4">
+                <li><a href="#" className="text-slate-400 hover:text-primary transition-colors font-medium">{t('privacy_policy', language)}</a></li>
+                <li><a href="#" className="text-slate-400 hover:text-primary transition-colors font-medium">{t('terms_of_service', language)}</a></li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Bottom Bar */}
+          <div className="pt-8 border-t border-slate-800">
+            <p className="text-center text-slate-400 font-medium">
+              © 2026 AgriShield AI | Built for Climate-Resilient Farming
+            </p>
           </div>
         </div>
       </footer>
