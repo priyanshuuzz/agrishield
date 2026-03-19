@@ -3,7 +3,6 @@ import { SimulationState, AnalysisResult } from './types';
 import { DISTRICTS } from './constants';
 import { runFullAnalysis } from './logic';
 import { Language } from './translations';
-import { useWeather, WeatherData } from './hooks/useWeather';
 
 interface AppContextType {
   state: SimulationState;
@@ -14,7 +13,6 @@ interface AppContextType {
   setCurrentPage: (page: string) => void;
   language: Language;
   setLanguage: (lang: Language) => void;
-  weather: WeatherData;
   isAnalyzing: boolean;
   lastUpdate: string;
 }
@@ -47,25 +45,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [result, setResult] = useState<AnalysisResult>(() => runFullAnalysis(state));
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState('');
-  
-  // Get real-time weather
-  const weather = useWeather();
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
     localStorage.setItem('agrishield_lang', lang);
   };
-
-  // Auto-update state with weather data when available
-  useEffect(() => {
-    if (!weather.isLoading && weather.temperature && !weather.error) {
-      setState(prev => ({
-        ...prev,
-        avgTemp: weather.temperature,
-        forecastRain: prev.forecastRain || weather.rainfall || prev.histRain * 0.85
-      }));
-    }
-  }, [weather.isLoading, weather.temperature]);
 
   useEffect(() => {
     localStorage.setItem('agrishield_state', JSON.stringify(state));
@@ -104,7 +88,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentPage, 
       language, 
       setLanguage,
-      weather,
       isAnalyzing,
       lastUpdate
     }}>

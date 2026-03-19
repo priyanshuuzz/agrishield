@@ -78,6 +78,27 @@ export const AIAssistant = () => {
     }
   }, [messages, isTyping]);
 
+  // Detect user intent to choose correct API endpoint
+  const detectIntent = (userInput: string): 'detailed' | 'quick' => {
+    const input = userInput.toLowerCase();
+    
+    // Keywords that indicate need for detailed analysis
+    const detailedKeywords = [
+      'analysis', 'analyze', 'profit', 'risk', 'rainfall', 
+      'weather', 'detailed', 'complete', 'full', 'temperature',
+      'humidity', 'factors', 'recommendations', 'why'
+    ];
+    
+    // Check if user query contains detailed keywords
+    for (const keyword of detailedKeywords) {
+      if (input.includes(keyword)) {
+        return 'detailed';
+      }
+    }
+    
+    return 'quick';
+  };
+
   // Map non-farming cities to nearby agricultural regions
   const mapToFarmingRegion = (location: string): { location: string; isMapped: boolean } => {
     const farmingMap: Record<string, string> = {
@@ -98,12 +119,17 @@ export const AIAssistant = () => {
     return { location, isMapped: false };
   };
 
-  // Extract location from user input or use current district
+  // Extract location from user input or use default
   const extractLocation = (userInput: string): { location: string; isMapped: boolean } => {
     const input = userInput.toLowerCase();
     
     // Check for common location keywords
-    const locations = ['pune', 'nashik', 'aurangabad', 'solapur', 'ahmednagar', 'satara', 'sangli', 'mumbai', 'delhi', 'bangalore', 'hyderabad'];
+    const locations = [
+      'pune', 'nashik', 'aurangabad', 'solapur', 'ahmednagar', 
+      'satara', 'sangli', 'mumbai', 'delhi', 'bangalore', 
+      'hyderabad', 'haryana', 'punjab', 'rajasthan', 'gujarat'
+    ];
+    
     for (const loc of locations) {
       if (input.includes(loc)) {
         const capitalizedLoc = loc.charAt(0).toUpperCase() + loc.slice(1);
@@ -111,9 +137,8 @@ export const AIAssistant = () => {
       }
     }
     
-    // Use current district as fallback
-    const currentLocation = districtIdToLocation(state.districtId);
-    return { location: currentLocation, isMapped: false };
+    // Default to Haryana if no location found
+    return { location: 'Haryana', isMapped: false };
   };
 
   // Shorten text to max words
@@ -126,7 +151,7 @@ export const AIAssistant = () => {
 
   // Clean text - remove markdown, extra spaces, null values
   const cleanText = (text: any): string => {
-    if (!text || text === 'null' || text === 'undefined') return '';
+    if (!text || text === 'null' || text === 'undefined' || text === 'N/A' || text === 'Unknown') return '';
     return String(text)
       .replace(/\*\*/g, '') // Remove bold markdown
       .replace(/\*/g, '')   // Remove italic markdown
@@ -134,26 +159,131 @@ export const AIAssistant = () => {
       .trim();
   };
 
-  // Format API response into clean, readable message
-  const formatApiResponse = (advice: any): string => {
-    if (!advice) return t('response_default', language);
+  // Split text into short bullet points (max 2 lines each)
+  const splitIntoBullets = (text: string, maxWordsPerLine: number = 10): string[] => {
+    if (!text) return [];
+    const words = text.split(' ');
+    const bullets: string[] = [];
+    
+    for (let i = 0; i < words.length; i += maxWordsPerLine) {
+      const chunk = words.slice(i, i + maxWordsPerLine).join(' ');
+      if (chunk.trim()) {
+        bullets.push(chunk.trim());
+      }
+    }
+    
+    return bullets;
+  };
+
+  // Format detailed analysis response
+  const formatAnalysisResponse = (analysis: any): string => {
+    if (!analysis) return 'Unable to get detailed analysis. Please try again.';
+    
+    // Extract and clean fields
+    const location = cleanText(analysis.location) || 'your area';
+    const riskScore = analysis.riskScore || 50;
+    const crops = analysis.crops || [];
+    const weather = analysis.weather;
+    const recommendations = analysis.recommendations || [];
+    
+    // Get top crop
+    const topCrop = crops.length > 0 ? crops[0] : null;
+    
+    // Build response
+    let response = `📍 Analysis for ${location}\n\n`;
+    
+    if (topCrop) {
+      response += `🌾 Recommended Crop:\n`;
+      response += `• ${cleanText(topCrop.name) || 'Bajra'}\n\n`;
+      
+      const reason = cleanText(topCrop.reason);
+      if (reason) {
+        response += `📊 Why this crop:\n`;
+        const reasonBullets = splitIntoBullets(reason, 10);
+        reasonBullets.slice(0, 2).forEach(bullet => {
+          response += `• ${bullet}\n`;
+        });
+        response += '\n';
+      }
+      
+      response += `💯 Suitability Score:\n`;
+      response += `• ${topCrop.score || 75}/100\n\n`;
+    }
+    
+    // Risk level
+    const riskLevel = riskScore < 30 ? 'Low' : riskScore < 60 ? 'Medium' : 'High';
+    response += `⚠️ Risk:\n`;
+    response += `• ${riskLevel} risk (${riskScore}%)\n`;
+    if (riskScore > 60) {
+      response += `• Monitor conditions closely\n`;
+    }
+    response += '\n';
+    
+    // Weather data
+    if (weather) {
+      response += `🌦 Weather Conditions:\n`;
+      if (weather.temperature) response += `• Temperature: ${weather.temperature}°C\n`;
+      if (weather.rainfall) response += `• Rainfall: ${weather.rainfall}mm\n`;
+      if (weather.humidity) response += `• Humidity: ${weather.humidity}%\n`;
+      response += '\n';
+    }
+    
+    // Recommendations
+    if (recommendations.length > 0) {
+      response += `✅ What to do:\n`;
+      recommendations.slice(0, 3).forEach((rec: string) => {
+        const cleanRec = cleanText(rec);
+        if (cleanRec) {
+          // Split long recommendations into shorter bullets
+          const recBullets = splitIntoBullets(cleanRec, 8);
+          recBullets.slice(0, 1).forEach(bullet => {
+            response += `• ${bullet}\n`;
+          });
+        }
+      });
+    }
+    
+    return response.trim();
+  };
+
+  // Format quick advice response
+  const formatQuickAdviceResponse = (advice: any): string => {
+    if (!advice) return 'Unable to get advice. Please try again.';
     
     // Extract and clean fields
     const crop = cleanText(advice.crop) || 'Bajra';
     const reason = cleanText(advice.reason) || 'Best suited for current conditions';
     const profit = cleanText(advice.profit) || 'Moderate profit potential';
     const risk = cleanText(advice.risk) || 'Medium';
-    const steps = Array.isArray(advice.steps) ? advice.steps.filter(s => s && s !== 'null') : [];
+    const steps = Array.isArray(advice.steps) ? advice.steps.filter(s => s && s !== 'null' && s !== 'N/A') : [];
     
-    // Shorten text for readability
-    const shortReason = shortenText(reason, 25); // ~2 lines
-    const shortProfit = shortenText(profit, 15); // ~1 line
+    // Build clean response with bullet points
+    let response = `🌾 Recommended Crop:\n`;
+    response += `• ${crop}\n\n`;
     
-    // Build clean response
-    let response = `🌾 Recommended Crop: ${crop}\n\n`;
-    response += `📊 Why this crop?\n${shortReason}\n\n`;
-    response += `💰 Profit: ${shortProfit}\n\n`;
-    response += `⚠️ Risk: ${risk}\n\n`;
+    // Break reason into bullet points
+    response += `📊 Why this crop:\n`;
+    const reasonBullets = splitIntoBullets(reason, 10);
+    reasonBullets.slice(0, 2).forEach(bullet => {
+      response += `• ${bullet}\n`;
+    });
+    response += '\n';
+    
+    // Break profit into bullet points
+    response += `💰 Profit:\n`;
+    const profitBullets = splitIntoBullets(profit, 8);
+    profitBullets.slice(0, 2).forEach(bullet => {
+      response += `• ${bullet}\n`;
+    });
+    response += '\n';
+    
+    // Risk as bullet
+    response += `⚠️ Risk:\n`;
+    response += `• ${risk} risk\n`;
+    if (risk.toLowerCase().includes('high')) {
+      response += `• Monitor conditions closely\n`;
+    }
+    response += '\n';
     
     // Add only first 3 action steps
     if (steps.length > 0) {
@@ -162,7 +292,9 @@ export const AIAssistant = () => {
       topSteps.forEach((step: string) => {
         const cleanStep = cleanText(step);
         if (cleanStep) {
-          response += `• ${cleanStep}\n`;
+          // Keep steps short - split if too long
+          const stepBullets = splitIntoBullets(cleanStep, 8);
+          response += `• ${stepBullets[0]}\n`;
         }
       });
     }
@@ -218,36 +350,60 @@ export const AIAssistant = () => {
     return t('response_default', language);
   };
 
-  // Main response generator with ML backend integration
+  // Main response generator with intelligent API selection
   const generateResponse = async (userInput: string): Promise<string> => {
     try {
+      // Detect user intent
+      const intent = detectIntent(userInput);
+      
       // Extract location from user input
       const { location, isMapped } = extractLocation(userInput);
       
-      console.log(`[AI Assistant] Calling ML API for location: ${location}${isMapped ? ' (mapped)' : ''}`);
+      console.log(`[AI Assistant] Intent: ${intent}, Location: ${location}${isMapped ? ' (mapped)' : ''}`);
       
-      // Call external ML backend API
+      let response = '';
+      
+      // Add location mapping message if needed
+      if (isMapped) {
+        response = `ℹ️ Showing results for nearby farming region: ${location}\n\n`;
+      }
+      
+      // Call appropriate API based on intent
+      if (intent === 'detailed') {
+        console.log('[AI Assistant] Calling detailed analysis API');
+        
+        // Call detailed analysis endpoint
+        const analysis = await externalApiService.getAnalysis(location, {
+          rainfall: state.forecastRain,
+          temperature: weather.temperature || state.avgTemp,
+          soil_type: state.soilType
+        });
+        
+        if (analysis) {
+          console.log('[AI Assistant] Analysis API response received:', analysis);
+          response += formatAnalysisResponse(analysis);
+          return response;
+        }
+        
+        console.log('[AI Assistant] Analysis API returned null, trying quick advice');
+      }
+      
+      // Fall back to quick advice or use it for quick intent
+      console.log('[AI Assistant] Calling quick advice API');
       const advice = await externalApiService.getQuickAdvice(location);
       
       if (advice) {
-        console.log('[AI Assistant] ML API response received:', advice);
-        
-        // Build response with location mapping message if needed
-        let response = '';
-        if (isMapped) {
-          response = `ℹ️ Showing results for nearby farming region: ${location}\n\n`;
-        }
-        
-        response += formatApiResponse(advice);
+        console.log('[AI Assistant] Quick advice API response received:', advice);
+        response += formatQuickAdviceResponse(advice);
         return response;
       }
       
-      // If API returns null, use fallback
-      console.log('[AI Assistant] ML API returned null, using fallback');
+      // If both APIs fail, use fallback
+      console.log('[AI Assistant] Both APIs returned null, using fallback');
       return generateFallbackResponse(userInput);
       
     } catch (error) {
-      console.error('[AI Assistant] ML API error:', error);
+      console.error('[AI Assistant] API error:', error);
       // On error, use fallback response
       return generateFallbackResponse(userInput);
     }
@@ -298,9 +454,9 @@ export const AIAssistant = () => {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden">
       <Sidebar />
-      <main className="flex-1 ml-64 p-8 overflow-hidden flex flex-col">
+      <main className="flex-1 ml-64 p-8 pb-0 overflow-hidden flex flex-col">
         <Header 
           title={t('assistant', language)} 
           subtitle={t('ai_assistant_desc', language)} 
@@ -310,7 +466,7 @@ export const AIAssistant = () => {
           variants={containerVariants}
           initial="hidden"
           animate="visible"
-          className="flex-1 grid lg:grid-cols-12 gap-8 overflow-hidden"
+          className="flex-1 grid lg:grid-cols-12 gap-8 overflow-hidden mb-0"
         >
           {/* Left Side: Info & Prompts */}
           <motion.div variants={itemVariants} className="lg:col-span-4 flex flex-col gap-6">
@@ -349,9 +505,9 @@ export const AIAssistant = () => {
           </motion.div>
 
           {/* Right Side: Chat UI */}
-          <motion.div variants={itemVariants} className="lg:col-span-8 flex flex-col bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-2xl shadow-slate-200/50 dark:shadow-none overflow-hidden">
-            {/* Chat Header */}
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
+          <motion.div variants={itemVariants} className="lg:col-span-8 flex flex-col bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-2xl shadow-slate-200/50 dark:shadow-none overflow-hidden h-full relative">
+            {/* Chat Header - Fixed */}
+            <div className="flex-shrink-0 p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50 z-10">
               <div className="flex items-center gap-4">
                 <div className="relative">
                   <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
@@ -374,10 +530,10 @@ export const AIAssistant = () => {
               </div>
             </div>
 
-            {/* Messages Area */}
+            {/* Messages Area - Scrollable */}
             <div 
               ref={scrollRef}
-              className="flex-1 overflow-y-auto p-8 space-y-6 scroll-smooth"
+              className="flex-1 overflow-y-auto p-8 pb-28 space-y-6 scroll-smooth min-h-0"
             >
               <AnimatePresence initial={false}>
                 {messages.map((msg) => (
@@ -433,8 +589,8 @@ export const AIAssistant = () => {
               )}
             </div>
 
-            {/* Input Area */}
-            <div className="p-6 bg-slate-50/50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800">
+            {/* Input Area - Floating */}
+            <div className="absolute bottom-4 left-6 right-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-4 z-20">
               <div className="relative flex items-center gap-4">
                 {/* Voice Button */}
                 {isSupported && (

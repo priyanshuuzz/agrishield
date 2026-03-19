@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../store';
-import { LayoutDashboard, FlaskConical, ShieldAlert, Map, Home, Settings, Plus, Info, TrendingUp, Sprout, Leaf, Flower2, Sparkles, AlertTriangle, Droplets, Thermometer, Layers, History, ArrowRight, ChevronRight, Satellite, ShieldCheck, Network, Brain, Play, TrendingDown, Flower, HelpCircle, User, LogOut, Bell, MessageSquare, Globe } from 'lucide-react';
+import { LayoutDashboard, FlaskConical, ShieldAlert, Map, Home, Settings, Plus, Info, TrendingUp, Sprout, Leaf, Flower2, Sparkles, AlertTriangle, Droplets, Thermometer, Layers, History, ArrowRight, ChevronRight, Satellite, ShieldCheck, Network, Brain, Play, TrendingDown, Flower, HelpCircle, Bell, MessageSquare, Globe } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { motion } from 'motion/react';
@@ -136,19 +136,6 @@ export const Sidebar = () => {
           <Plus size={18} />
           {t('new_analysis', language)}
         </button>
-
-        <div className="pt-6 border-t border-slate-100 dark:border-slate-800 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 overflow-hidden">
-            <img src="https://i.pravatar.cc/150?u=priyanshu" alt="User" className="w-full h-full object-cover" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-black text-slate-900 dark:text-white truncate">Priyanshu Ojha</p>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">{t('premium_plan', language)}</p>
-          </div>
-          <button className="text-slate-400 hover:text-red-500 transition-colors">
-            <LogOut size={18} />
-          </button>
-        </div>
       </div>
     </aside>
   );

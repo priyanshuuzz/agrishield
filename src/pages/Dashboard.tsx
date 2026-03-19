@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../store';
 import { Sidebar, Header, cn } from '../components/Common';
-import { WeatherWidget } from '../components/WeatherWidget';
+import { getWeather } from '../services/weatherService';
 import { DISTRICTS, CROPS } from '../constants';
 import { getRiskMetadata } from '../logic';
-import { Sliders, Info, TrendingUp, Sprout, Leaf, Flower2, Sparkles, AlertTriangle, Droplets, Thermometer, Layers, History, ArrowRight, Target, Zap, ShieldCheck, Loader2 } from 'lucide-react';
+import { Sliders, Info, TrendingUp, Sprout, Leaf, Flower2, Sparkles, AlertTriangle, Droplets, Thermometer, Layers, History, ArrowRight, Target, Zap, ShieldCheck, Loader2, MapPin, Cloud, CloudRain, Sun } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { t } from '../translations';
 
@@ -27,9 +27,112 @@ const itemVariants = {
   }
 };
 
+const analyzeWeatherImpact = (weather: any) => {
+  if (!weather?.current) return 0;
+  let risk = 0;
+  if (weather.current.temp_c > 35) risk += 30;
+  if (weather.current.precip_mm < 1) risk += 25;
+  if (weather.current.humidity > 85) risk += 20;
+  if (weather.current.temp_c < 15) risk += 15;
+  if (weather.current.precip_mm > 50) risk += 20;
+  return Math.min(risk, 100);
+};
+
+const recommendCrop = (weather: any) => {
+  if (!weather?.current) return "Wheat";
+  if (weather.current.precip_mm < 1 && weather.current.temp_c > 30) return "Bajra";
+  if (weather.current.humidity > 80 && weather.current.precip_mm > 5) return "Rice";
+  if (weather.current.temp_c < 25 && weather.current.precip_mm < 10) return "Wheat";
+  if (weather.current.temp_c > 25 && weather.current.humidity > 60) return "Cotton";
+  return "Soybean";
+};
+
+const generateAdvice = (weather: any) => {
+  if (!weather?.current) return "⏳ Loading weather data...";
+  if (weather.current.precip_mm < 1 && weather.current.temp_c > 30)
+    return "⚠️ Irrigation required — low rainfall detected";
+  if (weather.current.temp_c > 35)
+    return "🔥 High heat risk — delay sowing or use heat-resistant varieties";
+  if (weather.current.humidity > 85)
+    return "💧 High humidity — monitor for fungal diseases";
+  if (weather.current.precip_mm > 50)
+    return "🌧️ Heavy rainfall — ensure proper drainage";
+  return "✅ Conditions are stable for farming operations";
+};
+
+const getRiskLabel = (risk: number): 'Low' | 'Moderate' | 'High' | 'Critical' => {
+  if (risk < 30) return 'Low';
+  if (risk < 60) return 'Moderate';
+  if (risk < 80) return 'High';
+  return 'Critical';
+};
+
 export const Dashboard = () => {
   const { state, result, updateState, runAnalysis, language, isAnalyzing, lastUpdate } = useApp();
-  const riskMeta = getRiskMetadata(result.riskScore);
+  
+  const [weather, setWeather] = useState<any>(null);
+  const [location, setLocation] = useState<string>("");
+  const [searchInput, setSearchInput] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [coords, setCoords] = useState<{lat: number; lon: number} | null>(null);
+
+  // Dynamic risk calculation based on weather
+  const dynamicRiskScore = weather ? analyzeWeatherImpact(weather) : result.riskScore;
+  const dynamicRiskLabel = getRiskLabel(dynamicRiskScore);
+  const riskMeta = getRiskMetadata(dynamicRiskScore);
+  
+  // Dynamic crop recommendation
+  const recommendedCrop = weather ? recommendCrop(weather) : result.cropRankings[0].cropId;
+  
+  // Dynamic advice
+  const smartAdvice = weather ? generateAdvice(weather) : "Analyzing conditions...";
+
+  // Auto-detect user location on mount
+  useEffect(() => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCoords({
+          lat: position.coords.latitude,
+          lon: position.coords.longitude,
+        });
+      },
+      () => {
+        console.log("Location permission denied, using default");
+        setLocation("Delhi");
+      }
+    );
+  }, []);
+
+  // Fetch weather when location or coords change
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        let query = "";
+        if (location) {
+          query = location;
+        } else if (coords) {
+          query = `${coords.lat},${coords.lon}`;
+        } else {
+          return;
+        }
+        
+        const data = await getWeather(query);
+        setWeather(data);
+      } catch (err) {
+        setError("Unable to fetch real-time data");
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    if (location || coords) {
+      fetchData();
+    }
+  }, [location, coords]);
 
   const format = (text: string, params?: Record<string, string>) => {
     if (!params) return text;
@@ -53,7 +156,87 @@ export const Dashboard = () => {
         
         {/* Weather Widget at Top */}
         <div className="mb-8">
-          <WeatherWidget />
+          <div className="bg-gradient-to-br from-primary/10 to-blue-500/10 dark:from-primary/20 dark:to-blue-500/20 rounded-2xl border border-primary/20 p-5 shadow-lg">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Cloud className="text-primary" size={24} />
+                <span className="text-xs font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">
+                  {t('current_weather', language)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Search city..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && searchInput.trim()) {
+                      setLocation(searchInput.trim());
+                      setCoords(null);
+                    }
+                  }}
+                  className="px-3 py-1 bg-white/50 dark:bg-slate-800/50 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300 border border-white/20 focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <div className="flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-slate-800/50 rounded-lg">
+                  <MapPin size={12} className="text-primary" />
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {loading ? 'Fetching live weather...' : weather?.location?.name || 'N/A'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-8 gap-2">
+                <Loader2 className="animate-spin text-primary" size={32} />
+                <span className="text-xs text-slate-500">Fetching live weather...</span>
+              </div>
+            ) : error ? (
+              <div className="text-center py-8 text-amber-600 dark:text-amber-400">⚠️ {error}</div>
+            ) : weather ? (
+              <div className="grid grid-cols-4 gap-4">
+                <div className="flex flex-col items-center p-3 bg-white/50 dark:bg-slate-800/50 rounded-xl backdrop-blur-sm">
+                  <Thermometer size={18} className="text-orange-500 mb-2" />
+                  <span className="text-2xl font-black text-slate-900 dark:text-white">
+                    {weather.current.temp_c}°
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">
+                    {t('temperature', language)}
+                  </span>
+                </div>
+
+                <div className="flex flex-col items-center p-3 bg-white/50 dark:bg-slate-800/50 rounded-xl backdrop-blur-sm">
+                  <CloudRain size={18} className="text-blue-500 mb-2" />
+                  <span className="text-2xl font-black text-slate-900 dark:text-white">
+                    {weather.current.precip_mm}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">mm</span>
+                </div>
+
+                <div className="flex flex-col items-center p-3 bg-white/50 dark:bg-slate-800/50 rounded-xl backdrop-blur-sm">
+                  <Droplets size={18} className="text-cyan-500 mb-2" />
+                  <span className="text-2xl font-black text-slate-900 dark:text-white">
+                    {weather.current.humidity}%
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">
+                    {t('humidity', language)}
+                  </span>
+                </div>
+
+                <div className="flex flex-col items-center justify-center p-3 bg-white/50 dark:bg-slate-800/50 rounded-xl backdrop-blur-sm">
+                  {weather.current.condition.icon ? (
+                    <img src={`https:${weather.current.condition.icon}`} alt={weather.current.condition.text} className="w-8 h-8" />
+                  ) : (
+                    <Sun size={24} className="text-yellow-500" />
+                  )}
+                  <span className="text-xs font-black text-slate-900 dark:text-white mt-2 text-center">
+                    {weather.current.condition.text}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         {/* Loading Overlay */}
@@ -209,27 +392,27 @@ export const Dashboard = () => {
                   <div className="absolute w-64 h-64 rounded-full border-[24px] border-slate-100 dark:border-slate-800"></div>
                   <motion.div 
                     initial={{ rotate: 45 }}
-                    animate={{ rotate: 45 + (result.riskScore / 100) * 180 }}
+                    animate={{ rotate: 45 + (dynamicRiskScore / 100) * 180 }}
                     transition={{ duration: 2, ease: "backOut" }}
                     className={cn("absolute w-64 h-64 rounded-full border-[24px] border-transparent border-t-current border-r-current transition-colors duration-1000", 
-                      result.riskScore < 30 ? "text-emerald-500" : result.riskScore < 70 ? "text-amber-500" : "text-red-500"
+                      dynamicRiskScore < 30 ? "text-emerald-500" : dynamicRiskScore < 70 ? "text-amber-500" : "text-red-500"
                     )}
                   ></motion.div>
                   <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center">
                     <motion.div 
-                      key={result.riskScore}
+                      key={dynamicRiskScore}
                       initial={{ opacity: 0, scale: 0.5 }}
                       animate={{ opacity: 1, scale: 1 }}
                       className="text-6xl font-black text-slate-900 dark:text-white leading-none tracking-tighter"
                     >
-                      {result.riskScore}
+                      {dynamicRiskScore}
                     </motion.div>
                     <span className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-2">{t('risk_index', language)}</span>
                   </div>
                 </div>
 
                 <p className="text-center text-sm font-bold text-slate-500 mb-8 max-w-[200px]">
-                  {t('risk_desc', language)}
+                  {smartAdvice}
                 </p>
 
                 <div className="w-full grid grid-cols-2 gap-6 mt-4">
@@ -238,14 +421,20 @@ export const Dashboard = () => {
                       <Droplets size={14} className="text-primary" />
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('rainfall', language)}</span>
                     </div>
-                    <p className="text-lg font-black text-slate-900 dark:text-white">{result.rainfallDeficit}%</p>
+                    <p className="text-lg font-black text-slate-900 dark:text-white">
+                      {weather?.current?.precip_mm || result.rainfallDeficit}
+                      {weather?.current?.precip_mm ? ' mm' : '%'}
+                    </p>
                   </div>
                   <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700">
                     <div className="flex items-center gap-2 mb-2">
                       <Thermometer size={14} className="text-orange-500" />
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('thermal', language)}</span>
                     </div>
-                    <p className="text-lg font-black text-slate-900 dark:text-white">{result.tempStress}%</p>
+                    <p className="text-lg font-black text-slate-900 dark:text-white">
+                      {weather?.current?.temp_c || result.tempStress}
+                      {weather?.current?.temp_c ? '°C' : '%'}
+                    </p>
                   </div>
                 </div>
               </motion.div>
@@ -269,16 +458,19 @@ export const Dashboard = () => {
                   </div>
 
                   <motion.div 
-                    key={result.cropRankings[0].cropId}
+                    key={recommendedCrop}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     className="space-y-4"
                   >
                     <h4 className="text-5xl font-black tracking-tighter">
-                      {t(result.cropRankings[0].cropId as any, language)}
+                      {t(recommendedCrop as any, language)}
                     </h4>
                     <p className="text-slate-400 font-bold text-lg leading-relaxed">
-                      {t('optimized_for', language)} {t(state.soilType.toLowerCase() + '_soil' as any, language)} {t('soil_type', language).toLowerCase()} {t('predicted_yield_of', language)} <span className="text-white">{result.predictedYields[result.cropRankings[0].cropId]} t/ha</span>.
+                      {weather ? 
+                        `Recommended based on current weather: ${weather.current.temp_c}°C, ${weather.current.humidity}% humidity, ${weather.current.precip_mm}mm rainfall.` :
+                        `${t('optimized_for', language)} ${t(state.soilType.toLowerCase() + '_soil' as any, language)} ${t('soil_type', language).toLowerCase()} ${t('predicted_yield_of', language)} ${result.predictedYields[recommendedCrop] || 'N/A'} t/ha.`
+                      }
                     </p>
                   </motion.div>
                 </div>
@@ -288,7 +480,7 @@ export const Dashboard = () => {
                     <span className="text-[10px] font-black uppercase text-white/40 tracking-widest">{t('resilience_score', language)}</span>
                     <div className="flex gap-1.5">
                       {[1, 2, 3, 4, 5].map(i => (
-                        <div key={i} className={cn("w-3 h-1.5 rounded-full", i <= result.cropRankings[0].resilience ? "bg-primary" : "bg-white/10")}></div>
+                        <div key={i} className={cn("w-3 h-1.5 rounded-full", i <= (dynamicRiskScore < 30 ? 5 : dynamicRiskScore < 60 ? 4 : 3) ? "bg-primary" : "bg-white/10")}></div>
                       ))}
                     </div>
                   </div>
@@ -388,9 +580,27 @@ export const Dashboard = () => {
               {/* AI Insights Section */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {[
-              { label: t('risk_intelligence', language), icon: ShieldCheck, data: result.insights.risk, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-              { label: t('optimal_choice', language), icon: Sparkles, data: result.insights.bestCrop, color: 'text-primary', bg: 'bg-primary/10' },
-              { label: t('critical_alert', language), icon: AlertTriangle, data: result.insights.warning, color: 'text-orange-500', bg: 'bg-orange-500/10' }
+              { 
+                label: t('risk_intelligence', language), 
+                icon: ShieldCheck, 
+                data: weather ? smartAdvice : result.insights.risk.key, 
+                color: 'text-emerald-500', 
+                bg: 'bg-emerald-500/10' 
+              },
+              { 
+                label: t('optimal_choice', language), 
+                icon: Sparkles, 
+                data: weather ? `${recommendedCrop} is optimal for current conditions` : result.insights.bestCrop.key, 
+                color: 'text-primary', 
+                bg: 'bg-primary/10' 
+              },
+              { 
+                label: t('critical_alert', language), 
+                icon: AlertTriangle, 
+                data: weather ? (dynamicRiskScore > 60 ? "High risk detected — take preventive action" : "No critical alerts") : result.insights.warning.key, 
+                color: 'text-orange-500', 
+                bg: 'bg-orange-500/10' 
+              }
             ].map((insight, idx) => (
               <motion.div 
                 variants={itemVariants}
@@ -403,7 +613,7 @@ export const Dashboard = () => {
                 <div>
                   <span className={cn("text-[10px] font-black uppercase tracking-[0.2em] mb-2 block", insight.color)}>{insight.label}</span>
                   <p className="text-sm font-bold leading-relaxed text-slate-600 dark:text-slate-300">
-                    {format(t(insight.data.key as any, language), insight.data.params)}
+                    {typeof insight.data === 'string' ? insight.data : format(t(insight.data as any, language), (insight as any).params)}
                   </p>
                 </div>
               </motion.div>
