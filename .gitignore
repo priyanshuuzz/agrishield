@@ -9,3 +9,6 @@ coverage/
 *.log
 .env*
 !.env.example
+# Backend extraction artifacts
+Fullback/
+backend_extracted/
