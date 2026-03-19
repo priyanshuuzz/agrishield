@@ -202,7 +202,7 @@ export const translations = {
   comparative_analysis: { en: "Comparative Analysis", hi: "तुलनात्मक विश्लेषण", hinglish: "Comparative Analysis" },
   crop: { en: "Crop", hi: "फसल", hinglish: "Fasal" },
   resilience_score: { en: "Resilience Score", hi: "लचीलापन स्कोर", hinglish: "Resilience Score" },
-  status: { en: "Status", hi: "स्थिति", hinglish: "Status" },
+  forecast_summary: { en: "7-Day Forecast Summary", hi: "7-दिन का पूर्वानुमान सारांश", hinglish: "7-Din ka Forecast" },
   predictive_optimization: { en: "Predictive Genetic Optimization", hi: "भविष्य कहनेवाला आनुवंशिक अनुकूलन", hinglish: "Nayi Variety Salah" },
   predictive_optimization_desc: { en: "Our models suggest that while {crop} is strong, switching to a hybrid variety in the next season could increase your climate safety margin by 12%.", hi: "हमारे मॉडल बताते हैं कि जबकि {crop} मजबूत है, अगले सीजन में हाइब्रिड किस्म पर स्विच करने से आपकी जलवायु सुरक्षा मार्जिन 12% बढ़ सकती है।", hinglish: "Agli baar hybrid variety use karein, 12% zyada safety milegi." },
   run_comparative_analysis: { en: "Run Comparative Analysis", hi: "तुलनात्मक विश्लेषण चलाएं", hinglish: "Analysis chalao" },

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../store';
 import { Sidebar, Header, cn } from '../components/Common';
-import { getWeather } from '../services/weatherService';
+import { getWeather, getForecast, analyzeTrend } from '../services/weatherService';
 import { DISTRICTS, CROPS } from '../constants';
 import { getRiskMetadata } from '../logic';
 import { Sliders, Info, TrendingUp, Sprout, Leaf, Flower2, Sparkles, AlertTriangle, Droplets, Thermometer, Layers, History, ArrowRight, Target, Zap, ShieldCheck, Loader2, MapPin, Cloud, CloudRain, Sun } from 'lucide-react';
@@ -38,8 +38,36 @@ const analyzeWeatherImpact = (weather: any) => {
   return Math.min(risk, 100);
 };
 
-const recommendCrop = (weather: any) => {
+const calculateAdvancedRisk = (weather: any, trend: any) => {
+  if (!weather?.current || !trend) return analyzeWeatherImpact(weather);
+  
+  let risk = 0;
+  
+  // Current weather impact
+  if (weather.current.temp_c > 35) risk += 25;
+  if (weather.current.precip_mm < 10) risk += 25;
+  if (weather.current.humidity > 85) risk += 15;
+  
+  // Future trend impact
+  if (trend.rainTrend < 50) risk += 20;
+  if (trend.tempTrend > 32) risk += 20;
+  if (trend.maxTemp > 38) risk += 15;
+  
+  return Math.min(100, risk);
+};
+
+const recommendCrop = (weather: any, trend?: any, soilType?: string) => {
   if (!weather?.current) return "Wheat";
+  
+  // Advanced recommendation with trend analysis
+  if (trend) {
+    if (trend.rainTrend < 50 && weather.current.temp_c > 30) return "Bajra";
+    if (weather.current.humidity > 80 && soilType?.toLowerCase() === "clayey") return "Rice";
+    if (trend.tempTrend > 32 && trend.rainTrend < 100) return "Millets";
+    if (trend.rainTrend > 150 && weather.current.humidity > 70) return "Rice";
+  }
+  
+  // Fallback to simple rules
   if (weather.current.precip_mm < 1 && weather.current.temp_c > 30) return "Bajra";
   if (weather.current.humidity > 80 && weather.current.precip_mm > 5) return "Rice";
   if (weather.current.temp_c < 25 && weather.current.precip_mm < 10) return "Wheat";
@@ -47,8 +75,21 @@ const recommendCrop = (weather: any) => {
   return "Soybean";
 };
 
-const generateAdvice = (weather: any) => {
+const generateAdvice = (weather: any, trend?: any) => {
   if (!weather?.current) return "⏳ Loading weather data...";
+  
+  if (trend) {
+    if (trend.rainTrend < 50 && weather.current.temp_c > 30)
+      return `⚠️ Low rainfall forecast (${trend.rainTrend}mm over ${trend.days} days) with high temperature (${trend.tempTrend}°C avg) — drought-resistant crops strongly recommended`;
+    if (trend.tempTrend > 35)
+      return `🔥 Extreme heat forecast (avg ${trend.tempTrend}°C, max ${trend.maxTemp}°C) — delay sowing or use heat-tolerant varieties`;
+    if (trend.rainTrend > 150)
+      return `🌧️ Heavy rainfall expected (${trend.rainTrend}mm total) — ensure proper drainage and consider water-loving crops`;
+    if (trend.rainTrend < 100 && trend.tempTrend > 30)
+      return `⚡ Moderate stress conditions (${trend.rainTrend}mm rain, ${trend.tempTrend}°C temp) — choose resilient varieties`;
+  }
+  
+  // Fallback to current conditions
   if (weather.current.precip_mm < 1 && weather.current.temp_c > 30)
     return "⚠️ Irrigation required — low rainfall detected";
   if (weather.current.temp_c > 35)
@@ -58,6 +99,31 @@ const generateAdvice = (weather: any) => {
   if (weather.current.precip_mm > 50)
     return "🌧️ Heavy rainfall — ensure proper drainage";
   return "✅ Conditions are stable for farming operations";
+};
+
+const generateExplanation = (weather: any, trend: any, recommendedCrop: string) => {
+  if (!weather?.current || !trend) return "";
+  
+  const reasons = [];
+  
+  if (trend.rainTrend < 50) {
+    reasons.push(`low rainfall forecast (${trend.rainTrend}mm over ${trend.days} days)`);
+  }
+  if (trend.tempTrend > 32) {
+    reasons.push(`high temperature trend (${trend.tempTrend}°C average)`);
+  }
+  if (weather.current.humidity > 80) {
+    reasons.push(`high humidity (${weather.current.humidity}%)`);
+  }
+  if (trend.maxTemp > 38) {
+    reasons.push(`extreme heat peaks (${trend.maxTemp}°C max)`);
+  }
+  
+  if (reasons.length === 0) {
+    return `${recommendedCrop} is recommended based on favorable conditions with ${trend.rainTrend}mm expected rainfall and ${trend.tempTrend}°C average temperature.`;
+  }
+  
+  return `${recommendedCrop} is recommended due to ${reasons.join(", ")}. This crop shows strong resilience under these conditions.`;
 };
 
 const getRiskLabel = (risk: number): 'Low' | 'Moderate' | 'High' | 'Critical' => {
@@ -71,22 +137,44 @@ export const Dashboard = () => {
   const { state, result, updateState, runAnalysis, language, isAnalyzing, lastUpdate } = useApp();
   
   const [weather, setWeather] = useState<any>(null);
+  const [forecast, setForecast] = useState<any>(null);
   const [location, setLocation] = useState<string>("");
   const [searchInput, setSearchInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [coords, setCoords] = useState<{lat: number; lon: number} | null>(null);
 
-  // Dynamic risk calculation based on weather
-  const dynamicRiskScore = weather ? analyzeWeatherImpact(weather) : result.riskScore;
+  const trend = useMemo(() => forecast ? analyzeTrend(forecast) : null, [forecast]);
+  
+  // Dynamic risk calculation with trend analysis
+  const dynamicRiskScore = useMemo(() => {
+    if (weather && trend) return calculateAdvancedRisk(weather, trend);
+    if (weather) return analyzeWeatherImpact(weather);
+    return result.riskScore;
+  }, [weather, trend, result.riskScore]);
+  
   const dynamicRiskLabel = getRiskLabel(dynamicRiskScore);
   const riskMeta = getRiskMetadata(dynamicRiskScore);
   
-  // Dynamic crop recommendation
-  const recommendedCrop = weather ? recommendCrop(weather) : result.cropRankings[0].cropId;
+  // Dynamic crop recommendation with trend
+  const recommendedCrop = useMemo(() => {
+    if (weather && trend) return recommendCrop(weather, trend, state.soilType);
+    if (weather) return recommendCrop(weather);
+    return result.cropRankings[0].cropId;
+  }, [weather, trend, state.soilType, result.cropRankings]);
   
-  // Dynamic advice
-  const smartAdvice = weather ? generateAdvice(weather) : "Analyzing conditions...";
+  // Dynamic advice with trend
+  const smartAdvice = useMemo(() => {
+    if (weather && trend) return generateAdvice(weather, trend);
+    if (weather) return generateAdvice(weather);
+    return "Analyzing conditions...";
+  }, [weather, trend]);
+  
+  // AI Explanation
+  const aiExplanation = useMemo(() => {
+    if (weather && trend) return generateExplanation(weather, trend, recommendedCrop);
+    return "";
+  }, [weather, trend, recommendedCrop]);
 
   // Auto-detect user location on mount
   useEffect(() => {
@@ -104,7 +192,7 @@ export const Dashboard = () => {
     );
   }, []);
 
-  // Fetch weather when location or coords change
+  // Fetch weather and forecast when location or coords change
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -120,8 +208,13 @@ export const Dashboard = () => {
           return;
         }
         
-        const data = await getWeather(query);
-        setWeather(data);
+        const [weatherData, forecastData] = await Promise.all([
+          getWeather(query),
+          getForecast(query, 7)
+        ]);
+        
+        setWeather(weatherData);
+        setForecast(forecastData);
       } catch (err) {
         console.error("Weather fetch error:", err);
         setError("⚠️ Live weather unavailable");
@@ -468,11 +561,35 @@ export const Dashboard = () => {
                       {t(recommendedCrop as any, language)}
                     </h4>
                     <p className="text-slate-400 font-bold text-lg leading-relaxed">
-                      {weather ? 
+                      {aiExplanation || (weather ? 
                         `Recommended based on current weather: ${weather.current.temp_c}°C, ${weather.current.humidity}% humidity, ${weather.current.precip_mm}mm rainfall.` :
                         `${t('optimized_for', language)} ${t(state.soilType.toLowerCase() + '_soil' as any, language)} ${t('soil_type', language).toLowerCase()} ${t('predicted_yield_of', language)} ${result.predictedYields[recommendedCrop] || 'N/A'} t/ha.`
-                      }
+                      )}
                     </p>
+                    
+                    {trend && (
+                      <div className="mt-6 p-4 bg-white/5 rounded-2xl border border-white/10">
+                        <h5 className="text-xs font-black text-primary mb-3 uppercase tracking-widest">{t('forecast_summary', language)}</h5>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-slate-400 font-medium">Next {trend.days} days rainfall:</span>
+                            <span className="text-white font-black ml-2">{trend.rainTrend}mm</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-medium">Avg temperature:</span>
+                            <span className="text-white font-black ml-2">{trend.tempTrend}°C</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-medium">Max temp:</span>
+                            <span className="text-white font-black ml-2">{trend.maxTemp}°C</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-medium">Min temp:</span>
+                            <span className="text-white font-black ml-2">{trend.minTemp}°C</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </motion.div>
                 </div>
                 
