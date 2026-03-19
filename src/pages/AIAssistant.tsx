@@ -78,49 +78,92 @@ export const AIAssistant = () => {
     }
   }, [messages, isTyping]);
 
+  // Map non-farming cities to nearby agricultural regions
+  const mapToFarmingRegion = (location: string): { location: string; isMapped: boolean } => {
+    const farmingMap: Record<string, string> = {
+      'mumbai': 'Pune',
+      'thane': 'Nashik',
+      'navi mumbai': 'Pune',
+      'bangalore': 'Pune',
+      'hyderabad': 'Aurangabad',
+      'chennai': 'Pune',
+      'kolkata': 'Pune',
+    };
+    
+    const lowerLocation = location.toLowerCase();
+    if (farmingMap[lowerLocation]) {
+      return { location: farmingMap[lowerLocation], isMapped: true };
+    }
+    
+    return { location, isMapped: false };
+  };
+
   // Extract location from user input or use current district
-  const extractLocation = (userInput: string): string => {
+  const extractLocation = (userInput: string): { location: string; isMapped: boolean } => {
     const input = userInput.toLowerCase();
     
     // Check for common location keywords
-    const locations = ['pune', 'nashik', 'aurangabad', 'solapur', 'ahmednagar', 'satara', 'sangli', 'mumbai', 'delhi'];
+    const locations = ['pune', 'nashik', 'aurangabad', 'solapur', 'ahmednagar', 'satara', 'sangli', 'mumbai', 'delhi', 'bangalore', 'hyderabad'];
     for (const loc of locations) {
       if (input.includes(loc)) {
-        return loc.charAt(0).toUpperCase() + loc.slice(1);
+        const capitalizedLoc = loc.charAt(0).toUpperCase() + loc.slice(1);
+        return mapToFarmingRegion(capitalizedLoc);
       }
     }
     
     // Use current district as fallback
-    return districtIdToLocation(state.districtId);
+    const currentLocation = districtIdToLocation(state.districtId);
+    return { location: currentLocation, isMapped: false };
   };
 
-  // Format API response into readable message
+  // Shorten text to max words
+  const shortenText = (text: string, maxWords: number): string => {
+    if (!text) return '';
+    const words = text.split(' ');
+    if (words.length <= maxWords) return text;
+    return words.slice(0, maxWords).join(' ') + '...';
+  };
+
+  // Clean text - remove markdown, extra spaces, null values
+  const cleanText = (text: any): string => {
+    if (!text || text === 'null' || text === 'undefined') return '';
+    return String(text)
+      .replace(/\*\*/g, '') // Remove bold markdown
+      .replace(/\*/g, '')   // Remove italic markdown
+      .replace(/\n\n+/g, '\n') // Remove extra newlines
+      .trim();
+  };
+
+  // Format API response into clean, readable message
   const formatApiResponse = (advice: any): string => {
     if (!advice) return t('response_default', language);
     
-    let response = `🌾 **Recommended Crop:** ${advice.crop}\n\n`;
-    response += `📊 **Why this crop?**\n${advice.reason}\n\n`;
+    // Extract and clean fields
+    const crop = cleanText(advice.crop) || 'Bajra';
+    const reason = cleanText(advice.reason) || 'Best suited for current conditions';
+    const profit = cleanText(advice.profit) || 'Moderate profit potential';
+    const risk = cleanText(advice.risk) || 'Medium';
+    const steps = Array.isArray(advice.steps) ? advice.steps.filter(s => s && s !== 'null') : [];
     
-    if (advice.profit) {
-      response += `💰 **Profit Insight:**\n${advice.profit}\n\n`;
-    }
+    // Shorten text for readability
+    const shortReason = shortenText(reason, 25); // ~2 lines
+    const shortProfit = shortenText(profit, 15); // ~1 line
     
-    if (advice.risk) {
-      response += `⚠️ **Risk Level:** ${advice.risk}\n\n`;
-    }
+    // Build clean response
+    let response = `🌾 Recommended Crop: ${crop}\n\n`;
+    response += `📊 Why this crop?\n${shortReason}\n\n`;
+    response += `💰 Profit: ${shortProfit}\n\n`;
+    response += `⚠️ Risk: ${risk}\n\n`;
     
-    if (advice.steps && advice.steps.length > 0) {
-      response += `✅ **What you should do:**\n`;
-      advice.steps.forEach((step: string, i: number) => {
-        response += `${i + 1}. ${step}\n`;
-      });
-      response += '\n';
-    }
-    
-    if (advice.warnings && advice.warnings.length > 0) {
-      response += `🚨 **Warnings:**\n`;
-      advice.warnings.forEach((warning: string) => {
-        response += `• ${warning}\n`;
+    // Add only first 3 action steps
+    if (steps.length > 0) {
+      response += `✅ What to do:\n`;
+      const topSteps = steps.slice(0, 3);
+      topSteps.forEach((step: string) => {
+        const cleanStep = cleanText(step);
+        if (cleanStep) {
+          response += `• ${cleanStep}\n`;
+        }
       });
     }
     
@@ -179,16 +222,24 @@ export const AIAssistant = () => {
   const generateResponse = async (userInput: string): Promise<string> => {
     try {
       // Extract location from user input
-      const location = extractLocation(userInput);
+      const { location, isMapped } = extractLocation(userInput);
       
-      console.log(`[AI Assistant] Calling ML API for location: ${location}`);
+      console.log(`[AI Assistant] Calling ML API for location: ${location}${isMapped ? ' (mapped)' : ''}`);
       
       // Call external ML backend API
       const advice = await externalApiService.getQuickAdvice(location);
       
       if (advice) {
         console.log('[AI Assistant] ML API response received:', advice);
-        return formatApiResponse(advice);
+        
+        // Build response with location mapping message if needed
+        let response = '';
+        if (isMapped) {
+          response = `ℹ️ Showing results for nearby farming region: ${location}\n\n`;
+        }
+        
+        response += formatApiResponse(advice);
+        return response;
       }
       
       // If API returns null, use fallback
